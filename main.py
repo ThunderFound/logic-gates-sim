@@ -1,7 +1,8 @@
 import sys
+import math
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QCursor, QPen, QTransform
+from PyQt6.QtGui import QBrush, QCursor, QPen, QTransform, QFontDatabase, QFont
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsEllipseItem,
@@ -18,10 +19,14 @@ from PyQt6.QtWidgets import (
 
 import config
 
+FONT = None
+
 
 def make_wire_pen(powered=False):
     color = config.PIN_COLOR_ON if powered else config.PIN_COLOR_OFF
-    return QPen(color, config.WIRE_THICKNESS)
+    pen = QPen(color, config.WIRE_THICKNESS)
+    pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+    return pen
 
 
 class Wire(QGraphicsLineItem):
@@ -30,7 +35,7 @@ class Wire(QGraphicsLineItem):
         self.output_pin = output_pin
         self.input_pin = input_pin
 
-        self.setZValue(-1)
+        self.setZValue(math.inf)
         self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
 
         output_pin.wires.append(self)
@@ -109,7 +114,7 @@ class Pin(QGraphicsEllipseItem):
             self.drag_anchor = self
 
         self.drag_line = QGraphicsLineItem()
-        self.drag_line.setZValue(-1)
+        self.drag_line.setZValue(math.inf)
         self.drag_line.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.scene().addItem(self.drag_line)
         self.update_drag_line(event.scenePos())
@@ -162,12 +167,21 @@ class Gate(QGraphicsRectItem):
         self.pins = []
         self.setPos(x, y)
         self.setBrush(QBrush(config.GATE_COLORS[name]))
+        pen = QPen(config.GATE_COLORS[name].darker(200), 4)
+        pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+        self.setPen(pen)
 
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
 
+        font = QFont(FONT, 16)
+        font.setWeight(700)
+
         label = QGraphicsSimpleTextItem(name, self)
+        label.setFont(font)
+        label.setBrush(QBrush(config.GATE_COLORS[name].darker(200)))
+
         text_rect = label.boundingRect()
         label.setPos(
             (config.GATE_WIDTH - text_rect.width()) / 2,
@@ -258,12 +272,19 @@ class GateView(QGraphicsView):
 
 class MainWindow(QWidget):
     def __init__(self):
+        global FONT
+
         super().__init__()
         self.setWindowTitle("Logic Gates")
         self.resize(1000, 600)
 
+        font_id = QFontDatabase.addApplicationFont("fonts/JetBrainsMono.ttf")
+        font_families = QFontDatabase.applicationFontFamilies(font_id)
+        FONT = font_families[0]
+
         self.view = GateView()
         self.zoom_label = QLabel("100%")
+        self.zoom_label.setFont(QFont(FONT, 16))
         self.zoom_label.setContentsMargins(8, 8, 8, 8)
         self.zoom_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 

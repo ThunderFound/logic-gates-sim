@@ -1,5 +1,5 @@
 # logic gates simulator
-![screenshot](imgs/screenshot.png)<br>
+![screenshot](imgs/screenshot2.png)<br>
 (как создать OR)
 
 Пока что можно только создавать цепи из NOT и AND<br>
