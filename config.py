@@ -1,0 +1,24 @@
+from PyQt6.QtGui import QColor
+
+GATE_WIDTH = 80
+GATE_HEIGHT = 50
+
+PIN_RADIUS = 5
+WIRE_THICKNESS = 10
+
+PIN_COLOR_OFF = QColor(0, 0, 0)
+PIN_COLOR_ON = QColor(168, 37, 92)
+
+GATE_COLORS = {
+    "AND": QColor(73, 75, 191),
+    "NOT": QColor(191, 73, 73),
+}
+
+GATE_INPUT_COUNTS = {
+    "AND": 2,
+    "NOT": 1,
+}
+
+ZOOM_MIN = 10
+ZOOM_MAX = 500
+ZOOM_STEP = 10
