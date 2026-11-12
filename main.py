@@ -1,8 +1,17 @@
 import sys
 import math
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QCursor, QPen, QTransform, QFontDatabase, QFont
+from PyQt6.QtCore import Qt, pyqtSignal, QPointF
+from PyQt6.QtGui import (
+    QBrush,
+    QCursor,
+    QPen,
+    QTransform,
+    QFontDatabase,
+    QFont,
+    QPixmap,
+    QPainter,
+)
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsEllipseItem,
@@ -19,7 +28,15 @@ from PyQt6.QtWidgets import (
 
 import config
 
-FONT = None
+font_name = None
+snapping_enabled = False
+
+
+def snap_position(x, y):
+    return (
+        x // config.GRID_SIZE * config.GRID_SIZE + config.GRID_SIZE / 2,
+        y // config.GRID_SIZE * config.GRID_SIZE + config.GRID_SIZE / 2,
+    )
 
 
 def make_wire_pen(powered=False):
@@ -163,6 +180,7 @@ class Pin(QGraphicsEllipseItem):
 
 class Gate(QGraphicsRectItem):
     def __init__(self, name, x, y):
+        # x, y = snap_position(x, y)
         super().__init__(0, 0, config.GATE_WIDTH, config.GATE_HEIGHT)
         self.pins = []
         self.setPos(x, y)
@@ -175,7 +193,7 @@ class Gate(QGraphicsRectItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
 
-        font = QFont(FONT, 16)
+        font = QFont(font_name, 16)
         font.setWeight(700)
 
         label = QGraphicsSimpleTextItem(name, self)
@@ -200,6 +218,9 @@ class Gate(QGraphicsRectItem):
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            global snapping_enabled
+            if snapping_enabled:
+                self.setPos(*snap_position(value.x(), value.y()))
             for pin in self.pins:
                 pin.update_wires()
         return super().itemChange(change, value)
@@ -216,6 +237,11 @@ class GateView(QGraphicsView):
         self.setSceneRect(-5000, -5000, 10000, 10000)
         self.centerOn(0, 0)
 
+        brush = QBrush(QPixmap("imgs/circle tile.png"))
+        brush.setTransform(QTransform.fromScale(0.25, 0.25))
+        self.setBackgroundBrush(brush)
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -225,8 +251,18 @@ class GateView(QGraphicsView):
             self.add_gate("AND")
         elif event.key() == Qt.Key.Key_2:
             self.add_gate("NOT")
+        elif event.key() == Qt.Key.Key_Control:
+            global snapping_enabled
+            snapping_enabled = True
         else:
             super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key.Key_Control:
+            global snapping_enabled
+            snapping_enabled = False
+        else:
+            super().keyReleaseEvent(event)
 
     def wheelEvent(self, event):
         self.wheel_remainder += event.angleDelta().y()
@@ -272,7 +308,7 @@ class GateView(QGraphicsView):
 
 class MainWindow(QWidget):
     def __init__(self):
-        global FONT
+        global font_name
 
         super().__init__()
         self.setWindowTitle("Logic Gates")
@@ -280,11 +316,11 @@ class MainWindow(QWidget):
 
         font_id = QFontDatabase.addApplicationFont("fonts/JetBrainsMono.ttf")
         font_families = QFontDatabase.applicationFontFamilies(font_id)
-        FONT = font_families[0]
+        font_name = font_families[0]
 
         self.view = GateView()
         self.zoom_label = QLabel("100%")
-        self.zoom_label.setFont(QFont(FONT, 16))
+        self.zoom_label.setFont(QFont(font_name, 16))
         self.zoom_label.setContentsMargins(8, 8, 8, 8)
         self.zoom_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
