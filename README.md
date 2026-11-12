@@ -1,10 +1,11 @@
 # logic gates simulator
-![screenshot](imgs/screenshot2.png)<br>
+![screenshot](imgs/screenshot3.png)<br>
 (как создать OR)
 
 Пока что можно только создавать цепи из NOT и AND<br>
 Чтобы соединить контакты/переместить логический элемент/подвинуть вид нужно зажать ЛКМ<br>
 Чтобы приблизить вид - скролл<br>
+Привязка к сетке - CTRL<br>
 1 - добавить AND<br>
 2 - добавить NOT<br>
 
