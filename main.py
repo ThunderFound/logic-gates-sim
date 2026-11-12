@@ -1,7 +1,6 @@
 import sys
-import math
 
-from PyQt6.QtCore import Qt, pyqtSignal, QPointF
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import (
     QBrush,
     QCursor,
@@ -42,7 +41,7 @@ def snap_position(x, y):
 def make_wire_pen(powered=False):
     color = config.PIN_COLOR_ON if powered else config.PIN_COLOR_OFF
     pen = QPen(color, config.WIRE_THICKNESS)
-    pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     return pen
 
 
@@ -52,7 +51,7 @@ class Wire(QGraphicsLineItem):
         self.output_pin = output_pin
         self.input_pin = input_pin
 
-        self.setZValue(math.inf)
+        self.setZValue(2)
         self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
 
         output_pin.wires.append(self)
@@ -90,6 +89,7 @@ class Pin(QGraphicsEllipseItem):
             config.PIN_RADIUS * 2,
             gate,
         )
+        self.setZValue(1)
         self.gate = gate
         self.is_input = is_input
         self.powered = False
@@ -98,14 +98,27 @@ class Pin(QGraphicsEllipseItem):
         self.drag_line = None
         self.drag_anchor = None
 
+        self.brush = QBrush(config.PIN_COLOR_OFF)
+        self.pen = QPen(config.PIN_COLOR_OFF.darker(200), 4)
+        self.pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+
         self.setPos(x, y)
-        self.setPen(QPen(Qt.PenStyle.NoPen))
-        self.setBrush(QBrush(config.PIN_COLOR_OFF))
+        self.setBrush(self.brush)
+        self.setPen(self.pen)
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
 
     def set_powered(self, powered):
         self.powered = powered
-        self.setBrush(QBrush(config.PIN_COLOR_ON if powered else config.PIN_COLOR_OFF))
+
+        self.brush.setColor(config.PIN_COLOR_ON if powered else config.PIN_COLOR_OFF)
+        self.pen.setColor(
+            config.PIN_COLOR_ON.darker(200)
+            if powered
+            else config.PIN_COLOR_OFF.darker(200)
+        )
+        self.setBrush(self.brush)
+        self.setPen(self.pen)
+
         for wire in self.wires:
             wire.update_color()
 
@@ -131,7 +144,7 @@ class Pin(QGraphicsEllipseItem):
             self.drag_anchor = self
 
         self.drag_line = QGraphicsLineItem()
-        self.drag_line.setZValue(math.inf)
+        self.drag_line.setZValue(1)
         self.drag_line.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.scene().addItem(self.drag_line)
         self.update_drag_line(event.scenePos())
@@ -178,11 +191,59 @@ class Pin(QGraphicsEllipseItem):
         self.drag_line.setPen(make_wire_pen(powered))
 
 
+class Toggle(QGraphicsRectItem):
+    def __init__(self, x, y):
+        super().__init__(0, 0, config.TOGGLE_SIZE, config.TOGGLE_SIZE)
+        self.setZValue(0)
+        self.brush = QBrush(config.PIN_COLOR_OFF)
+        self.pen = QPen(config.PIN_COLOR_OFF.darker(200), 4)
+        self.pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+
+        self.setPos(x, y)
+        self.setBrush(self.brush)
+        self.setPen(self.pen)
+
+        self.setAcceptedMouseButtons(
+            Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton
+        )
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+
+        self.powered = False
+        pin_y = config.TOGGLE_SIZE / 2
+        self.pin = Pin(self, False, config.TOGGLE_SIZE, pin_y)
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            global snapping_enabled
+            if snapping_enabled:
+                self.setPos(*snap_position(value.x(), value.y()))
+            self.pin.update_wires()
+        return super().itemChange(change, value)
+
+    def toggle(self):
+        self.powered = not self.powered
+        self.pin.set_powered(self.powered)
+
+        if self.powered:
+            self.brush.setColor(config.PIN_COLOR_ON)
+            self.pen.setColor(config.PIN_COLOR_ON.darker(200))
+        else:
+            self.brush.setColor(config.PIN_COLOR_OFF)
+            self.pen.setColor(config.PIN_COLOR_OFF.darker(200))
+        self.setBrush(self.brush)
+        self.setPen(self.pen)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            self.toggle()
+
+
 class Gate(QGraphicsRectItem):
     def __init__(self, name, x, y):
-        # x, y = snap_position(x, y)
         super().__init__(0, 0, config.GATE_WIDTH, config.GATE_HEIGHT)
         self.pins = []
+        self.setZValue(0)
         self.setPos(x, y)
         self.setBrush(QBrush(config.GATE_COLORS[name]))
         pen = QPen(config.GATE_COLORS[name].darker(200), 4)
@@ -240,7 +301,11 @@ class GateView(QGraphicsView):
         brush = QBrush(QPixmap("imgs/circle tile.png"))
         brush.setTransform(QTransform.fromScale(0.25, 0.25))
         self.setBackgroundBrush(brush)
-        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        self.setRenderHint(
+            QPainter.RenderHint.SmoothPixmapTransform
+            | QPainter.RenderHint.Antialiasing,
+            True,
+        )
 
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -251,6 +316,8 @@ class GateView(QGraphicsView):
             self.add_gate("AND")
         elif event.key() == Qt.Key.Key_2:
             self.add_gate("NOT")
+        elif event.key() == Qt.Key.Key_3:
+            self.add_toggle()
         elif event.key() == Qt.Key.Key_Control:
             global snapping_enabled
             snapping_enabled = True
@@ -304,6 +371,18 @@ class GateView(QGraphicsView):
             scene_pos.y() - config.GATE_HEIGHT / 2,
         )
         self.scene().addItem(gate)
+
+    def add_toggle(self):
+        cursor = self.viewport().mapFromGlobal(QCursor.pos())
+        if not self.viewport().rect().contains(cursor):
+            cursor = self.viewport().rect().center()
+
+        scene_pos = self.mapToScene(cursor)
+        toggle = Toggle(
+            scene_pos.x() - config.TOGGLE_SIZE / 2,
+            scene_pos.y() - config.TOGGLE_SIZE / 2,
+        )
+        self.scene().addItem(toggle)
 
 
 class MainWindow(QWidget):
