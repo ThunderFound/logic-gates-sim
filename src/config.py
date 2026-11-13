@@ -1,3 +1,4 @@
+import os
 from PyQt6.QtGui import QColor
 
 GATE_WIDTH = 64
@@ -34,3 +35,5 @@ ZOOM_MAX = 500
 ZOOM_STEP = 10
 
 GRID_SIZE = 16
+
+ROOT_DIR = os.path.abspath(os.curdir)

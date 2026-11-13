@@ -1,4 +1,5 @@
 import sys
+import os
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import (
@@ -45,6 +46,13 @@ def make_wire_pen(powered=False):
     return pen
 
 
+def update_power(scene):
+    gates = [item for item in scene.items() if isinstance(item, Gate)]
+    for _ in range(config.MAX_LOOPS):
+        if not any([gate.evaluate() for gate in gates]):
+            break
+
+
 class Wire(QGraphicsLineItem):
     def __init__(self, output_pin, input_pin):
         super().__init__()
@@ -78,6 +86,7 @@ def connect_pins(output_pin, input_pin, scene):
     for wire in list(input_pin.wires):
         wire.remove()
     scene.addItem(Wire(output_pin, input_pin))
+    update_power(scene)
 
 
 class Pin(QGraphicsEllipseItem):
@@ -233,6 +242,7 @@ class Toggle(QGraphicsRectItem):
             self.pen.setColor(config.PIN_COLOR_OFF.darker(200))
         self.setBrush(self.brush)
         self.setPen(self.pen)
+        update_power(self.scene())
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton:
@@ -242,6 +252,7 @@ class Toggle(QGraphicsRectItem):
 class Gate(QGraphicsRectItem):
     def __init__(self, name, x, y):
         super().__init__(0, 0, config.GATE_WIDTH, config.GATE_HEIGHT)
+        self.name = name
         self.pins = []
         self.setZValue(0)
         self.setPos(x, y)
@@ -269,13 +280,36 @@ class Gate(QGraphicsRectItem):
 
         input_count = config.GATE_INPUT_COUNTS[name]
         for i in range(input_count):
-            pin_y = config.GATE_HEIGHT * (i + 1) / (input_count + 1)
+            gap = (config.GATE_HEIGHT - input_count * config.PIN_RADIUS) / (input_count + 1)
+            pin_y = gap * (i + 1) + config.PIN_RADIUS * i + config.PIN_RADIUS / 2
+            # pin_y = config.GATE_HEIGHT * (i + 1) / (input_count + 1)
             self.pins.append(Pin(self, True, 0, pin_y))
 
         output_count = 1
         for i in range(output_count):
-            pin_y = config.GATE_HEIGHT * (i + 1) / (output_count + 1)
+            gap = (config.GATE_HEIGHT - output_count * config.PIN_RADIUS) / (output_count + 1)
+            pin_y = gap * (i + 1) + config.PIN_RADIUS * i + config.PIN_RADIUS / 2
+            # pin_y = config.GATE_HEIGHT * (i + 1) / (output_count + 1)
             self.pins.append(Pin(self, False, config.GATE_WIDTH, pin_y))
+
+        self.input_pins = [pin for pin in self.pins if pin.is_input]
+        self.output_pin = next(pin for pin in self.pins if not pin.is_input)
+
+    def evaluate(self):
+        changed = False
+
+        for pin in self.input_pins:
+            powered = bool(pin.wires) and pin.wires[0].output_pin.powered
+            if pin.powered != powered:
+                pin.set_powered(powered)
+                changed = True
+
+        powered = config.GATE_LOGIC[self.name]([pin.powered for pin in self.input_pins])
+        if self.output_pin.powered != powered:
+            self.output_pin.set_powered(powered)
+            changed = True
+
+        return changed
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
@@ -298,7 +332,7 @@ class GateView(QGraphicsView):
         self.setSceneRect(-5000, -5000, 10000, 10000)
         self.centerOn(0, 0)
 
-        brush = QBrush(QPixmap("imgs/circle tile.png"))
+        brush = QBrush(QPixmap(os.path.join(config.ROOT_DIR, "content/imgs/circle tile.png")))
         brush.setTransform(QTransform.fromScale(0.25, 0.25))
         self.setBackgroundBrush(brush)
         self.setRenderHint(
@@ -371,6 +405,7 @@ class GateView(QGraphicsView):
             scene_pos.y() - config.GATE_HEIGHT / 2,
         )
         self.scene().addItem(gate)
+        update_power(self.scene())
 
     def add_toggle(self):
         cursor = self.viewport().mapFromGlobal(QCursor.pos())
@@ -393,7 +428,7 @@ class MainWindow(QWidget):
         self.setWindowTitle("Logic Gates")
         self.resize(1000, 600)
 
-        font_id = QFontDatabase.addApplicationFont("fonts/JetBrainsMono.ttf")
+        font_id = QFontDatabase.addApplicationFont(os.path.join(config.ROOT_DIR, "content/fonts/JetBrainsMono.ttf"))
         font_families = QFontDatabase.applicationFontFamilies(font_id)
         font_name = font_families[0]
 
