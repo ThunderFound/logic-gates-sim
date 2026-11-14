@@ -1,5 +1,5 @@
 # logic gates simulator
-![screenshot](imgs/screenshot5.png)<br>
+![screenshot](imgs/screenshot6.png)<br>
 (как создать OR)
 
 Соединить контакты/переместить логический элемент/подвинуть вид - ЛКМ<br>
