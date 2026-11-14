@@ -47,7 +47,7 @@ def make_wire_pen(powered=False):
 
 
 def update_power(scene):
-    gates = [item for item in scene.items() if isinstance(item, Gate)]
+    gates = [item for item in scene.items() if isinstance(item, (Gate, Bulb))]
     for _ in range(config.MAX_LOOPS):
         if not any([gate.evaluate() for gate in gates]):
             break
@@ -79,6 +79,7 @@ class Wire(QGraphicsLineItem):
         self.output_pin.wires.remove(self)
         self.input_pin.wires.remove(self)
         if self.scene() is not None:
+            update_power(self.scene())
             self.scene().removeItem(self)
 
 
@@ -249,6 +250,53 @@ class Toggle(QGraphicsRectItem):
             self.toggle()
 
 
+class Bulb(QGraphicsRectItem):
+    def __init__(self, x, y):
+        super().__init__(0, 0, config.TOGGLE_SIZE, config.TOGGLE_SIZE)
+        self.setZValue(0)
+        self.brush = QBrush(config.BULB_COLOR_OFF)
+        self.pen = QPen(config.BULB_COLOR_OFF.darker(200), 4)
+        self.pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+
+        self.setPos(x, y)
+        self.setBrush(self.brush)
+        self.setPen(self.pen)
+
+        self.setAcceptedMouseButtons(
+            Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton
+        )
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+
+        self.powered = False
+        pin_y = config.TOGGLE_SIZE / 2
+        self.pin = Pin(self, True, 0, pin_y)
+
+    def evaluate(self):
+        powered = bool(self.pin.wires) and self.pin.wires[0].output_pin.powered
+        if self.pin.powered != powered:
+            self.pin.set_powered(powered)
+            
+            if powered:
+                self.brush.setColor(config.BULB_COLOR_ON)
+                self.pen.setColor(config.BULB_COLOR_ON.darker(200))
+            else:
+                self.brush.setColor(config.BULB_COLOR_OFF)
+                self.pen.setColor(config.BULB_COLOR_OFF.darker(200))
+            self.setBrush(self.brush)
+            self.setPen(self.pen)
+
+        return False
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            global snapping_enabled
+            if snapping_enabled:
+                self.setPos(*snap_position(value.x(), value.y()))
+            self.pin.update_wires()
+        return super().itemChange(change, value)
+
+
 class Gate(QGraphicsRectItem):
     def __init__(self, name, x, y):
         super().__init__(0, 0, config.GATE_WIDTH, config.GATE_HEIGHT)
@@ -352,6 +400,8 @@ class GateView(QGraphicsView):
             self.add_gate("NOT")
         elif event.key() == Qt.Key.Key_3:
             self.add_toggle()
+        elif event.key() == Qt.Key.Key_4:
+            self.add_bulb()
         elif event.key() == Qt.Key.Key_Control:
             global snapping_enabled
             snapping_enabled = True
@@ -418,6 +468,18 @@ class GateView(QGraphicsView):
             scene_pos.y() - config.TOGGLE_SIZE / 2,
         )
         self.scene().addItem(toggle)
+
+    def add_bulb(self):
+        cursor = self.viewport().mapFromGlobal(QCursor.pos())
+        if not self.viewport().rect().contains(cursor):
+            cursor = self.viewport().rect().center()
+
+        scene_pos = self.mapToScene(cursor)
+        bulb = Bulb(
+            scene_pos.x() - config.BULB_SIZE / 2,
+            scene_pos.y() - config.BULB_SIZE / 2,
+        )
+        self.scene().addItem(bulb)
 
 
 class MainWindow(QWidget):
