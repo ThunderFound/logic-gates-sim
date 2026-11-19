@@ -1,18 +1,21 @@
 import os
 
-from PyQt6.QtCore import Qt, pyqtSignal, QPointF
+from PyQt6.QtCore import Qt, pyqtSignal, QPointF, QTimer
 from PyQt6.QtGui import (
     QBrush,
+    QPen,
     QTransform,
     QFontDatabase,
     QFont,
     QPixmap,
     QPainter,
+    QColor,
 )
 from PyQt6.QtWidgets import (
     QFrame,
     QGraphicsScene,
     QGraphicsView,
+    QGraphicsRectItem,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -21,6 +24,9 @@ from PyQt6.QtWidgets import (
 
 import config
 import items
+
+
+shift_pressed = False
 
 
 class BarItem(QLabel):
@@ -136,7 +142,14 @@ class GateView(QGraphicsView):
 
     def __init__(self):
         super().__init__(QGraphicsScene())
-        self.trash = None
+        self.trash_widget = None
+        self.selection_start_pos = None
+        self.selection_widget = QGraphicsRectItem(0, 0, 0, 0)
+        self.selection_widget.setZValue(3)
+        self.selection_widget.setBrush(QBrush(QColor(150, 150, 150, 69)))
+        self.selection_widget.setPen(QPen(QColor(99, 99, 99, 255)))
+        self.selection_widget.setVisible(False)
+        self.scene().addItem(self.selection_widget)
         self.zoom = 100
         self.wheel_remainder = 0
 
@@ -161,12 +174,18 @@ class GateView(QGraphicsView):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Control:
             items.snapping_enabled = True
+        if event.key() == Qt.Key.Key_Shift:
+            global shift_pressed
+            shift_pressed = True
         else:
             super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key.Key_Control:
             items.snapping_enabled = False
+        if event.key() == Qt.Key.Key_Shift:
+            global shift_pressed
+            shift_pressed = False
         else:
             super().keyReleaseEvent(event)
 
@@ -174,16 +193,36 @@ class GateView(QGraphicsView):
         grabber = self.scene().mouseGrabberItem()
         super().mouseReleaseEvent(event)
 
-        if (
-            event.button() == Qt.MouseButton.LeftButton
-            and isinstance(grabber, (items.Gate, items.Toggle, items.Bulb))
-            and self.trash_widget is not None
+        if event.button() == Qt.MouseButton.LeftButton and isinstance(
+            grabber, (items.Gate, items.Toggle, items.Bulb)
         ):
             trash_pos = self.trash_widget.mapFromGlobal(
                 event.globalPosition().toPoint()
             )
             if self.trash_widget.rect().contains(trash_pos):
                 items.delete_scene_item(grabber, self.scene())
+        elif items.selecting_enabled and event.button() == Qt.MouseButton.LeftButton:
+            items.selecting_enabled = False
+            self.selection_widget.setVisible(False)
+
+    def mousePressEvent(self, event):
+        if shift_pressed and event.button() == Qt.MouseButton.LeftButton:
+            items.selecting_enabled = True
+            self.selection_start_pos = self.mapToScene(event.position().toPoint())
+            self.selection_widget.setPos(self.selection_start_pos)
+            self.selection_widget.setVisible(True)
+        else:
+            return super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if items.selecting_enabled:
+            print("move")
+            pos = self.mapToScene(event.position().toPoint())
+            new_x = pos.x() - self.selection_start_pos.x()
+            new_y = pos.y() - self.selection_start_pos.y()
+            self.selection_widget.setRect(new_x if new_x < 0 else 0, new_y if new_y < 0 else 0, abs(new_x), abs(new_y))
+        else:
+            return super().mouseMoveEvent(event)
 
     def wheelEvent(self, event):
         self.wheel_remainder += event.angleDelta().y()
@@ -262,6 +301,11 @@ class MainWindow(QWidget):
         self.zoom_label.setFont(QFont(items.font_name, 16))
         self.zoom_label.setContentsMargins(8, 8, 8, 8)
         self.zoom_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.tps_label = QLabel("tps: n/a")
+        self.tps_label.setFont(QFont(items.font_name, 16))
+        self.tps_label.setStyleSheet("color: rgba(255, 255, 255, 0.5)")
+        self.tps_label.setContentsMargins(8, 8, 8, 8)
+        self.tps_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -274,8 +318,23 @@ class MainWindow(QWidget):
             0,
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom,
         )
+        layout.addWidget(
+            self.tps_label,
+            0,
+            0,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+        )
         layout.addWidget(self.item_bar, 1, 0)
         self.zoom_label.raise_()
+        self.tps_label.raise_()
 
         self.view.zoom_changed.connect(lambda zoom: self.zoom_label.setText(f"{zoom}%"))
         self.view.setFocus()
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(
+            lambda: self.tps_label.setText(
+                f"tick: {items.update_power(self.view) / 1e6:.3f}ms"
+            )
+        )
+        self.timer.start(int(1000 / 60))

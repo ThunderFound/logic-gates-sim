@@ -47,7 +47,7 @@ GATE_LOGIC = {
     "XNOR": lambda inputs: not (inputs[0] != inputs[1]),
 }
 
-MAX_LOOPS = 128
+MAX_LOOPS = 1
 
 ZOOM_MIN = 10
 ZOOM_MAX = 500

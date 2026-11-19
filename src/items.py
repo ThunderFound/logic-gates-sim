@@ -1,4 +1,5 @@
 import math
+import time
 
 from PyQt6.QtCore import Qt, QRectF
 from PyQt6.QtGui import (
@@ -22,6 +23,7 @@ import config
 
 font_name = None
 snapping_enabled = False
+selecting_enabled = False
 
 
 def snap_position(x, y):
@@ -39,11 +41,13 @@ def make_wire_pen(powered=False):
 
 
 def update_power(scene):
+    start = time.perf_counter_ns()
     gates = [item for item in scene.items() if isinstance(item, (Gate, Bulb))]
     for _ in range(config.MAX_LOOPS):
         if not any([gate.evaluate() for gate in gates]):
             break
-
+    return time.perf_counter_ns() - start
+        
 
 def render_item_pixmap(item_type, gate_name=None):
     temp_scene = QGraphicsScene()
@@ -71,7 +75,7 @@ def delete_scene_item(item, scene):
         for wire in list(pin.wires):
             wire.remove()
     scene.removeItem(item)
-    update_power(scene)
+    # update_power(scene)
 
 
 class Wire(QGraphicsLineItem):
@@ -100,7 +104,7 @@ class Wire(QGraphicsLineItem):
         self.output_pin.wires.remove(self)
         self.input_pin.wires.remove(self)
         if self.scene() is not None:
-            update_power(self.scene())
+            # update_power(self.scene())
             self.scene().removeItem(self)
 
 
@@ -108,7 +112,7 @@ def connect_pins(output_pin, input_pin, scene):
     for wire in list(input_pin.wires):
         wire.remove()
     scene.addItem(Wire(output_pin, input_pin))
-    update_power(scene)
+    # update_power(scene)
 
 
 class Pin(QGraphicsEllipseItem):
@@ -158,8 +162,8 @@ class Pin(QGraphicsEllipseItem):
             wire.update_position()
 
     def can_connect_to(self, other):
-        if other.gate is self.gate:
-            return False
+        # if other.gate is self.gate:
+        #     return False
         return self.is_input != other.is_input
 
     def mousePressEvent(self, event):
@@ -266,7 +270,7 @@ class Toggle(QGraphicsRectItem):
             self.pen.setColor(config.PIN_COLOR_OFF.darker(200))
         self.setBrush(self.brush)
         self.setPen(self.pen)
-        update_power(self.scene())
+        # update_power(self.scene())
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton:
