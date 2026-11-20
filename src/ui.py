@@ -210,6 +210,7 @@ class GateView(QGraphicsView):
             items.selecting_enabled = True
             self.selection_start_pos = self.mapToScene(event.position().toPoint())
             self.selection_widget.setPos(self.selection_start_pos)
+            self.selection_widget.setRect(0, 0, 0, 0)
             self.selection_widget.setVisible(True)
         else:
             return super().mousePressEvent(event)
@@ -220,7 +221,12 @@ class GateView(QGraphicsView):
             pos = self.mapToScene(event.position().toPoint())
             new_x = pos.x() - self.selection_start_pos.x()
             new_y = pos.y() - self.selection_start_pos.y()
-            self.selection_widget.setRect(new_x if new_x < 0 else 0, new_y if new_y < 0 else 0, abs(new_x), abs(new_y))
+            self.selection_widget.setRect(
+                new_x if new_x < 0 else 0,
+                new_y if new_y < 0 else 0,
+                abs(new_x),
+                abs(new_y),
+            )
         else:
             return super().mouseMoveEvent(event)
 
