@@ -217,7 +217,7 @@ class GateView(QGraphicsView):
 
     def mouseMoveEvent(self, event):
         if items.selecting_enabled:
-            print("move")
+            # print("move")
             pos = self.mapToScene(event.position().toPoint())
             new_x = pos.x() - self.selection_start_pos.x()
             new_y = pos.y() - self.selection_start_pos.y()
